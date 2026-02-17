@@ -9,6 +9,10 @@ CORS(app)
 # PostgreSQL connection
 def get_db_connection():
     DATABASE_URL = os.environ.get("DATABASE_URL")
+
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL is not set in environment variables")
+
     conn = psycopg2.connect(DATABASE_URL)
     return conn
 
