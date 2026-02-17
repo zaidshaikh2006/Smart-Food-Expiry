@@ -105,6 +105,32 @@ def add_food():
 def home():
     return "Backend is running successfully"
 
+# ==============================
+# Get Food API
+# ==============================
+
+@app.route("/getFoods", methods=["GET"])
+def get_foods():
+    conn, db_type = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM food_items;")
+    rows = cursor.fetchall()
+
+    result = []
+    for row in rows:
+        result.append({
+            "id": row[0],
+            "item_name": row[1],
+            "quantity": row[2],
+            "expiry_date": row[3],
+            "price": row[4]
+        })
+
+    cursor.close()
+    conn.close()
+
+    return jsonify(result)
 
 # ==============================
 # Run App
