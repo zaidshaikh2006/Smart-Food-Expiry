@@ -133,6 +133,20 @@ def get_foods():
     return jsonify(result)
 
 # ==============================
+# DebugDB 
+# ==============================
+
+@app.route("/debugDB")
+def debug_db():
+    conn, db_type = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM food_items;")
+    count = cursor.fetchone()[0]
+    cursor.close()
+    conn.close()
+    return f"Total records: {count}"
+
+# ==============================
 # Run App
 # ==============================
 
