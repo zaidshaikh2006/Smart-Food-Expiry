@@ -1,30 +1,32 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import sqlite3
+import psycopg2
+import os
 
 app = Flask(__name__)
 CORS(app)
 
-# Database connection
+# PostgreSQL connection
 def get_db_connection():
-    conn = sqlite3.connect("food.db")
-    conn.row_factory = sqlite3.Row
+    DATABASE_URL = os.environ.get("DATABASE_URL")
+    conn = psycopg2.connect(DATABASE_URL)
     return conn
 
-# Create table automatically if not exists
+# Create table if not exists
 def create_table():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS food_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            item_name TEXT NOT NULL,
+            id SERIAL PRIMARY KEY,
+            item_name VARCHAR(255) NOT NULL,
             quantity INTEGER NOT NULL,
-            expiry_date TEXT NOT NULL,
+            expiry_date VARCHAR(50) NOT NULL,
             price REAL NOT NULL
-        )
+        );
     """)
     conn.commit()
+    cursor.close()
     conn.close()
 
 create_table()
@@ -43,10 +45,11 @@ def add_food():
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO food_items (item_name, quantity, expiry_date, price)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
     """, (item_name, quantity, expiry_date, price))
 
     conn.commit()
+    cursor.close()
     conn.close()
 
     return jsonify({"message": "Food added successfully"}), 201
@@ -54,7 +57,9 @@ def add_food():
 
 @app.route("/")
 def home():
-    return "Backend is running successfully"
+    return "Backend is running successfully with PostgreSQL"
+
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)

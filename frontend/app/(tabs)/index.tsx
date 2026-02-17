@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from "react-native";
 
-const API_URL = "https://violinistic-nonspeciously-shandra.ngrok-free.dev"; 
+const API_URL = "https://smart-food-expiry.onrender.com"; 
 
 export default function AddFood() {
   const [itemName, setItemName] = useState("");
