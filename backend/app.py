@@ -1,41 +1,72 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import psycopg2
 import os
+import psycopg2
 
 app = Flask(__name__)
 CORS(app)
 
-# PostgreSQL connection
+
+# ==============================
+# Database Connection
+# ==============================
+
 def get_db_connection():
     DATABASE_URL = os.environ.get("DATABASE_URL")
 
-    if not DATABASE_URL:
-        raise ValueError("DATABASE_URL is not set in environment variables")
+    if DATABASE_URL:
+        # Running on Render (PostgreSQL)
+        conn = psycopg2.connect(DATABASE_URL)
+        return conn, "postgres"
+    else:
+        # Running locally (SQLite)
+        import sqlite3
+        conn = sqlite3.connect("food.db")
+        conn.row_factory = sqlite3.Row
+        return conn, "sqlite"
 
-    conn = psycopg2.connect(DATABASE_URL)
-    return conn
 
-# Create table if not exists
+# ==============================
+# Create Table Automatically
+# ==============================
+
 def create_table():
-    conn = get_db_connection()
+    conn, db_type = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS food_items (
-            id SERIAL PRIMARY KEY,
-            item_name VARCHAR(255) NOT NULL,
-            quantity INTEGER NOT NULL,
-            expiry_date VARCHAR(50) NOT NULL,
-            price REAL NOT NULL
-        );
-    """)
+
+    if db_type == "postgres":
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS food_items (
+                id SERIAL PRIMARY KEY,
+                item_name VARCHAR(255) NOT NULL,
+                quantity INTEGER NOT NULL,
+                expiry_date VARCHAR(50) NOT NULL,
+                price REAL NOT NULL
+            );
+        """)
+    else:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS food_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                expiry_date TEXT NOT NULL,
+                price REAL NOT NULL
+            );
+        """)
+
     conn.commit()
     cursor.close()
     conn.close()
 
+
 create_table()
 
-# Add food API
+
+# ==============================
+# Add Food API
+# ==============================
+
 @app.route("/addFood", methods=["POST"])
 def add_food():
     data = request.json
@@ -45,12 +76,19 @@ def add_food():
     expiry_date = data["expiry_date"]
     price = data["price"]
 
-    conn = get_db_connection()
+    conn, db_type = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO food_items (item_name, quantity, expiry_date, price)
-        VALUES (%s, %s, %s, %s)
-    """, (item_name, quantity, expiry_date, price))
+
+    if db_type == "postgres":
+        cursor.execute("""
+            INSERT INTO food_items (item_name, quantity, expiry_date, price)
+            VALUES (%s, %s, %s, %s)
+        """, (item_name, quantity, expiry_date, price))
+    else:
+        cursor.execute("""
+            INSERT INTO food_items (item_name, quantity, expiry_date, price)
+            VALUES (?, ?, ?, ?)
+        """, (item_name, quantity, expiry_date, price))
 
     conn.commit()
     cursor.close()
@@ -59,10 +97,18 @@ def add_food():
     return jsonify({"message": "Food added successfully"}), 201
 
 
+# ==============================
+# Home Route
+# ==============================
+
 @app.route("/")
 def home():
-    return "Backend is running successfully with PostgreSQL"
+    return "Backend is running successfully"
 
+
+# ==============================
+# Run App
+# ==============================
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
