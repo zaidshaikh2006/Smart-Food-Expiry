@@ -3,11 +3,9 @@ from flask_cors import CORS
 import os
 import psycopg2
 import re
-from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
-
 
 # ==============================
 # Database Connection
@@ -25,9 +23,8 @@ def get_db_connection():
         conn.row_factory = sqlite3.Row
         return conn, "sqlite"
 
-
 # ==============================
-# Create Table Automatically
+# Create Table
 # ==============================
 
 def create_table():
@@ -63,9 +60,7 @@ def create_table():
     cursor.close()
     conn.close()
 
-
 create_table()
-
 
 # ==============================
 # Add Food API
@@ -81,7 +76,6 @@ def add_food():
     expiry_date = data.get("expiry_date")
     price = data.get("price")
 
-    # Backend validation
     if not re.match(r"^[A-Za-z ]+$", item_name):
         return jsonify({"message": "Item name must contain only letters"}), 400
 
@@ -107,9 +101,8 @@ def add_food():
 
     return jsonify({"message": "Food added successfully"}), 201
 
-
 # ==============================
-# Get Food API
+# Get Food API (SAFE VERSION)
 # ==============================
 
 @app.route("/getFoods", methods=["GET"])
@@ -121,31 +114,59 @@ def get_foods():
     rows = cursor.fetchall()
 
     result = []
+
+    # Get column names dynamically
+    columns = [desc[0] for desc in cursor.description]
+
     for row in rows:
-        result.append({
-            "id": row[0],
-            "item_name": row[1],
-            "category": row[2],
-            "quantity": row[3],
-            "expiry_date": row[4],
-            "price": row[5],
-            "purchase_date": row[6]
-        })
+        row_dict = {}
+        for i in range(len(columns)):
+            row_dict[columns[i]] = row[i]
+        result.append(row_dict)
 
     cursor.close()
     conn.close()
 
     return jsonify(result)
 
+# ==============================
+# Fix DB Route (Safe)
+# ==============================
+
+@app.route("/fixDB")
+def fix_db():
+    conn, db_type = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        if db_type == "postgres":
+            cursor.execute("""
+                ALTER TABLE food_items
+                ADD COLUMN IF NOT EXISTS purchase_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+            """)
+        else:
+            cursor.execute("""
+                ALTER TABLE food_items
+                ADD COLUMN purchase_date TEXT DEFAULT CURRENT_TIMESTAMP;
+            """)
+
+        conn.commit()
+        message = "Column checked/added successfully"
+    except Exception as e:
+        message = str(e)
+
+    cursor.close()
+    conn.close()
+
+    return message
 
 # ==============================
-# Debug Route
+# Debug Routes
 # ==============================
 
 @app.route("/")
 def home():
     return "Backend is running successfully"
-
 
 @app.route("/debugDB")
 def debug_db():
@@ -156,7 +177,6 @@ def debug_db():
     cursor.close()
     conn.close()
     return f"Total records: {count}"
-
 
 # ==============================
 # Run App
