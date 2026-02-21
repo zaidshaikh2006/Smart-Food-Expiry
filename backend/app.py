@@ -16,22 +16,19 @@ def get_db_connection():
 
     if DATABASE_URL:
         conn = psycopg2.connect(DATABASE_URL)
-        return conn, "postgres"
+        return conn
     else:
-        import sqlite3
-        conn = sqlite3.connect("food.db")
-        conn.row_factory = sqlite3.Row
-        return conn, "sqlite"
+        raise Exception("DATABASE_URL not found")
 
 # ==============================
-# Create Table
+# Create Table (Safe)
 # ==============================
 
 def create_table():
-    conn, db_type = get_db_connection()
-    cursor = conn.cursor()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
-    if db_type == "postgres":
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS food_items (
                 id SERIAL PRIMARY KEY,
@@ -39,31 +36,27 @@ def create_table():
                 category VARCHAR(100) NOT NULL,
                 quantity INTEGER NOT NULL,
                 expiry_date VARCHAR(50) NOT NULL,
-                price REAL NOT NULL,
-                purchase_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-    else:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS food_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_name TEXT NOT NULL,
-                category TEXT NOT NULL,
-                quantity INTEGER NOT NULL,
-                expiry_date TEXT NOT NULL,
-                price REAL NOT NULL,
-                purchase_date TEXT DEFAULT CURRENT_TIMESTAMP
+                price REAL NOT NULL
             );
         """)
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+        cursor.execute("""
+            ALTER TABLE food_items
+            ADD COLUMN IF NOT EXISTS purchase_date 
+            TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        """)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+    except Exception as e:
+        print("Database error:", e)
 
 create_table()
 
 # ==============================
-# Add Food API
+# Add Food
 # ==============================
 
 @app.route("/addFood", methods=["POST"])
@@ -77,23 +70,16 @@ def add_food():
     price = data.get("price")
 
     if not re.match(r"^[A-Za-z ]+$", item_name):
-        return jsonify({"message": "Item name must contain only letters"}), 400
+        return jsonify({"message": "Invalid item name"}), 400
 
-    conn, db_type = get_db_connection()
+    conn = get_db_connection()
     cursor = conn.cursor()
 
-    if db_type == "postgres":
-        cursor.execute("""
-            INSERT INTO food_items 
-            (item_name, category, quantity, expiry_date, price)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (item_name, category, quantity, expiry_date, price))
-    else:
-        cursor.execute("""
-            INSERT INTO food_items 
-            (item_name, category, quantity, expiry_date, price)
-            VALUES (?, ?, ?, ?, ?)
-        """, (item_name, category, quantity, expiry_date, price))
+    cursor.execute("""
+        INSERT INTO food_items
+        (item_name, category, quantity, expiry_date, price)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (item_name, category, quantity, expiry_date, price))
 
     conn.commit()
     cursor.close()
@@ -102,22 +88,20 @@ def add_food():
     return jsonify({"message": "Food added successfully"}), 201
 
 # ==============================
-# Get Food API (SAFE VERSION)
+# Get Foods
 # ==============================
 
 @app.route("/getFoods", methods=["GET"])
 def get_foods():
-    conn, db_type = get_db_connection()
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute("SELECT * FROM food_items;")
     rows = cursor.fetchall()
 
-    result = []
-
-    # Get column names dynamically
     columns = [desc[0] for desc in cursor.description]
 
+    result = []
     for row in rows:
         row_dict = {}
         for i in range(len(columns)):
@@ -130,56 +114,15 @@ def get_foods():
     return jsonify(result)
 
 # ==============================
-# Fix DB Route (Safe)
-# ==============================
-
-@app.route("/fixDB")
-def fix_db():
-    conn, db_type = get_db_connection()
-    cursor = conn.cursor()
-
-    try:
-        if db_type == "postgres":
-            cursor.execute("""
-                ALTER TABLE food_items
-                ADD COLUMN IF NOT EXISTS purchase_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-            """)
-        else:
-            cursor.execute("""
-                ALTER TABLE food_items
-                ADD COLUMN purchase_date TEXT DEFAULT CURRENT_TIMESTAMP;
-            """)
-
-        conn.commit()
-        message = "Column checked/added successfully"
-    except Exception as e:
-        message = str(e)
-
-    cursor.close()
-    conn.close()
-
-    return message
-
-# ==============================
-# Debug Routes
+# Home
 # ==============================
 
 @app.route("/")
 def home():
     return "Backend is running successfully"
 
-@app.route("/debugDB")
-def debug_db():
-    conn, db_type = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM food_items;")
-    count = cursor.fetchone()[0]
-    cursor.close()
-    conn.close()
-    return f"Total records: {count}"
-
 # ==============================
-# Run App
+# Run
 # ==============================
 
 if __name__ == "__main__":
