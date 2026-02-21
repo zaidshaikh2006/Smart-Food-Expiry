@@ -1,13 +1,32 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  Platform,
+} from "react-native";
+import { Picker } from "@react-native-picker/picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
-const API_URL = "https://smart-food-expiry.onrender.com"; 
+const API_URL = "https://smart-food-expiry.onrender.com";
 
 export default function AddFood() {
   const [itemName, setItemName] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [expiryDate, setExpiryDate] = useState("");
   const [price, setPrice] = useState("");
+  const [category, setCategory] = useState("Dairy");
+
+  const [expiryDate, setExpiryDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const handleItemNameChange = (text: string) => {
+    // Allow only alphabets and spaces
+    const filtered = text.replace(/[^A-Za-z ]/g, "");
+    setItemName(filtered);
+  };
 
   const addFood = async () => {
     if (!itemName || !quantity || !expiryDate || !price) {
@@ -23,8 +42,9 @@ export default function AddFood() {
         },
         body: JSON.stringify({
           item_name: itemName,
+          category: category,
           quantity: Number(quantity),
-          expiry_date: expiryDate,
+          expiry_date: expiryDate.toISOString().split("T")[0],
           price: Number(price),
         }),
       });
@@ -34,8 +54,9 @@ export default function AddFood() {
 
       setItemName("");
       setQuantity("");
-      setExpiryDate("");
       setPrice("");
+      setExpiryDate(null);
+      setCategory("Dairy");
     } catch (error) {
       Alert.alert("Error", "Cannot connect to server");
     }
@@ -48,9 +69,23 @@ export default function AddFood() {
       <TextInput
         placeholder="Item Name"
         value={itemName}
-        onChangeText={setItemName}
+        onChangeText={handleItemNameChange}
         style={styles.input}
       />
+
+      <Picker
+        selectedValue={category}
+        onValueChange={(itemValue) => setCategory(itemValue)}
+        style={styles.input}
+      >
+        <Picker.Item label="Dairy" value="Dairy" />
+        <Picker.Item label="Vegetables" value="Vegetables" />
+        <Picker.Item label="Fruits" value="Fruits" />
+        <Picker.Item label="Snacks" value="Snacks" />
+        <Picker.Item label="Beverages" value="Beverages" />
+        <Picker.Item label="Meat" value="Meat" />
+        <Picker.Item label="Others" value="Others" />
+      </Picker>
 
       <TextInput
         placeholder="Quantity"
@@ -60,12 +95,29 @@ export default function AddFood() {
         style={styles.input}
       />
 
-      <TextInput
-        placeholder="Expiry Date (YYYY-MM-DD)"
-        value={expiryDate}
-        onChangeText={setExpiryDate}
+      <TouchableOpacity
         style={styles.input}
-      />
+        onPress={() => setShowDatePicker(true)}
+      >
+        <Text>
+          {expiryDate
+            ? expiryDate.toISOString().split("T")[0]
+            : "Select Expiry Date"}
+        </Text>
+      </TouchableOpacity>
+
+      {showDatePicker && (
+        <DateTimePicker
+          value={expiryDate || new Date()}
+          mode="date"
+          display="default"
+          minimumDate={new Date()}
+          onChange={(event, selectedDate) => {
+            setShowDatePicker(Platform.OS === "ios");
+            if (selectedDate) setExpiryDate(selectedDate);
+          }}
+        />
+      )}
 
       <TextInput
         placeholder="Price"
@@ -92,17 +144,18 @@ const styles = StyleSheet.create({
     fontSize: 22,
     marginBottom: 20,
     textAlign: "center",
+    fontWeight: "bold",
   },
   input: {
     borderWidth: 1,
-    padding: 10,
-    marginBottom: 10,
-    borderRadius: 5,
+    padding: 12,
+    marginBottom: 12,
+    borderRadius: 6,
   },
   button: {
     backgroundColor: "#007BFF",
     padding: 15,
-    borderRadius: 5,
+    borderRadius: 6,
     alignItems: "center",
   },
   buttonText: {

@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 import psycopg2
+import re
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
@@ -15,11 +17,9 @@ def get_db_connection():
     DATABASE_URL = os.environ.get("DATABASE_URL")
 
     if DATABASE_URL:
-        # Running on Render (PostgreSQL)
         conn = psycopg2.connect(DATABASE_URL)
         return conn, "postgres"
     else:
-        # Running locally (SQLite)
         import sqlite3
         conn = sqlite3.connect("food.db")
         conn.row_factory = sqlite3.Row
@@ -39,9 +39,11 @@ def create_table():
             CREATE TABLE IF NOT EXISTS food_items (
                 id SERIAL PRIMARY KEY,
                 item_name VARCHAR(255) NOT NULL,
+                category VARCHAR(100) NOT NULL,
                 quantity INTEGER NOT NULL,
                 expiry_date VARCHAR(50) NOT NULL,
-                price REAL NOT NULL
+                price REAL NOT NULL,
+                purchase_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
     else:
@@ -49,9 +51,11 @@ def create_table():
             CREATE TABLE IF NOT EXISTS food_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 item_name TEXT NOT NULL,
+                category TEXT NOT NULL,
                 quantity INTEGER NOT NULL,
                 expiry_date TEXT NOT NULL,
-                price REAL NOT NULL
+                price REAL NOT NULL,
+                purchase_date TEXT DEFAULT CURRENT_TIMESTAMP
             );
         """)
 
@@ -71,24 +75,31 @@ create_table()
 def add_food():
     data = request.json
 
-    item_name = data["item_name"]
-    quantity = data["quantity"]
-    expiry_date = data["expiry_date"]
-    price = data["price"]
+    item_name = data.get("item_name")
+    category = data.get("category")
+    quantity = data.get("quantity")
+    expiry_date = data.get("expiry_date")
+    price = data.get("price")
+
+    # Backend validation
+    if not re.match(r"^[A-Za-z ]+$", item_name):
+        return jsonify({"message": "Item name must contain only letters"}), 400
 
     conn, db_type = get_db_connection()
     cursor = conn.cursor()
 
     if db_type == "postgres":
         cursor.execute("""
-            INSERT INTO food_items (item_name, quantity, expiry_date, price)
-            VALUES (%s, %s, %s, %s)
-        """, (item_name, quantity, expiry_date, price))
+            INSERT INTO food_items 
+            (item_name, category, quantity, expiry_date, price)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (item_name, category, quantity, expiry_date, price))
     else:
         cursor.execute("""
-            INSERT INTO food_items (item_name, quantity, expiry_date, price)
-            VALUES (?, ?, ?, ?)
-        """, (item_name, quantity, expiry_date, price))
+            INSERT INTO food_items 
+            (item_name, category, quantity, expiry_date, price)
+            VALUES (?, ?, ?, ?, ?)
+        """, (item_name, category, quantity, expiry_date, price))
 
     conn.commit()
     cursor.close()
@@ -96,14 +107,6 @@ def add_food():
 
     return jsonify({"message": "Food added successfully"}), 201
 
-
-# ==============================
-# Home Route
-# ==============================
-
-@app.route("/")
-def home():
-    return "Backend is running successfully"
 
 # ==============================
 # Get Food API
@@ -122,9 +125,11 @@ def get_foods():
         result.append({
             "id": row[0],
             "item_name": row[1],
-            "quantity": row[2],
-            "expiry_date": row[3],
-            "price": row[4]
+            "category": row[2],
+            "quantity": row[3],
+            "expiry_date": row[4],
+            "price": row[5],
+            "purchase_date": row[6]
         })
 
     cursor.close()
@@ -132,9 +137,15 @@ def get_foods():
 
     return jsonify(result)
 
+
 # ==============================
-# DebugDB 
+# Debug Route
 # ==============================
+
+@app.route("/")
+def home():
+    return "Backend is running successfully"
+
 
 @app.route("/debugDB")
 def debug_db():
@@ -145,6 +156,7 @@ def debug_db():
     cursor.close()
     conn.close()
     return f"Total records: {count}"
+
 
 # ==============================
 # Run App
