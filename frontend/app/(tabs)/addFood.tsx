@@ -7,11 +7,12 @@ import {
   Alert,
   StyleSheet,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
-const API_URL = "https://smart-food-expiry.onrender.com";
+const API_URL = "https://smart-food-expiry.onrender.com"; // NO slash at end
 
 export default function AddFood() {
   const [itemName, setItemName] = useState("");
@@ -21,9 +22,9 @@ export default function AddFood() {
 
   const [expiryDate, setExpiryDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleItemNameChange = (text: string) => {
-    // Allow only alphabets and spaces
     const filtered = text.replace(/[^A-Za-z ]/g, "");
     setItemName(filtered);
   };
@@ -34,7 +35,11 @@ export default function AddFood() {
       return;
     }
 
+    setLoading(true);
+
     try {
+      console.log("Sending request to:", `${API_URL}/addFood`);
+
       const response = await fetch(`${API_URL}/addFood`, {
         method: "POST",
         headers: {
@@ -49,17 +54,31 @@ export default function AddFood() {
         }),
       });
 
-      const data = await response.json();
-      Alert.alert("Success", data.message);
+      console.log("Response status:", response.status);
 
+      if (!response.ok) {
+        throw new Error("Server returned error");
+      }
+
+      const data = await response.json();
+
+      Alert.alert("Success", data.message || "Food added successfully");
+
+      // Reset fields
       setItemName("");
       setQuantity("");
       setPrice("");
       setExpiryDate(null);
       setCategory("Dairy");
-    } catch (error) {
-      Alert.alert("Error", "Cannot connect to server");
+    } catch (error: any) {
+      console.log("FETCH ERROR:", error);
+      Alert.alert(
+        "Connection Error",
+        "Server might be waking up. Please try again in 30 seconds."
+      );
     }
+
+    setLoading(false);
   };
 
   return (
@@ -127,8 +146,16 @@ export default function AddFood() {
         style={styles.input}
       />
 
-      <TouchableOpacity style={styles.button} onPress={addFood}>
-        <Text style={styles.buttonText}>ADD FOOD</Text>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={addFood}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="white" />
+        ) : (
+          <Text style={styles.buttonText}>ADD FOOD</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
